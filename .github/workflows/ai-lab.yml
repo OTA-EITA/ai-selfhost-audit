@@ -1,0 +1,129 @@
+# Live lab: starts each platform from its official compose file on a
+# disposable GitHub-hosted runner and checks the static findings against the
+# running containers. Manual only: it pulls upstream images and runs them, so
+# it never runs on pushes or PRs.
+name: ai-lab
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-lab
+  cancel-in-progress: false
+
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - product: n8n
+            repo: n8n-io/n8n-hosting
+            ref: b690a87c814aed2f56981047fb617d22e488b861
+            files: "docker-compose/withPostgres/docker-compose.yml docker-compose/withPostgres/.env docker-compose/withPostgres/init-data.sh"
+          - product: openwebui
+            repo: open-webui/open-webui
+            ref: v0.12.3
+            files: "docker-compose.yaml"
+          - product: litellm
+            repo: BerriAI/litellm
+            ref: v1.106.2
+            files: "docker-compose.yml .env.example prometheus.yml"
+          - product: langflow
+            repo: langflow-ai/langflow
+            ref: v1.12.7
+            files: "docker_example/docker-compose.yml"
+          - product: flowise
+            repo: FlowiseAI/Flowise
+            ref: flowise%403.1.4
+            files: "docker/docker-compose.yml docker/.env.example"
+    env:
+      PRODUCT: ${{ matrix.product }}
+      REPO: ${{ matrix.repo }}
+      REF: ${{ matrix.ref }}
+      FILES: ${{ matrix.files }}
+    steps:
+      - name: Check out this repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the official compose files at the pinned ref
+        run: |
+          mkdir -p "$RUNNER_TEMP/up"
+          for f in $FILES; do
+            out=$(basename "$f")
+            [ "$out" = ".env.example" ] && out=.env
+            curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/$f" -o "$RUNNER_TEMP/up/$out"
+          done
+          if [ "$PRODUCT" = langflow ]; then
+            # The compose file refuses to start without it.
+            echo "LANGFLOW_SUPERUSER_PASSWORD=$(openssl rand -hex 16)" > "$RUNNER_TEMP/up/.env"
+          fi
+          ls -la "$RUNNER_TEMP/up"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.3"
+          cache: false
+
+      - name: Static audit of the untouched files
+        run: |
+          go build -o "$RUNNER_TEMP/ai-selfhost-audit" ./cmd/ai-selfhost-audit
+          cd "$RUNNER_TEMP/up"
+          {
+            echo "## $PRODUCT: static audit of the official compose file"
+            echo '```'
+            "$RUNNER_TEMP/ai-selfhost-audit" --fail-on none | sed -n '1,/findings:/p'
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Free disk space for the images
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af >/dev/null
+          df -h /
+
+      - name: Start with every port bound to 127.0.0.1
+        working-directory: ${{ runner.temp }}/up
+        run: |
+          OV="$GITHUB_WORKSPACE/lab/override-$PRODUCT.yaml"
+          main=$(ls docker-compose.y*ml | head -1)
+          bad=$(docker compose -p lab -f "$main" -f "$OV" config --format json \
+            | jq -r '.services | to_entries[] | .key as $s | (.value.ports // [])[] | select((.host_ip // "") != "127.0.0.1") | "\($s) \(.published)"')
+          if [ -n "$bad" ]; then echo "::error::ports not bound to 127.0.0.1: $bad"; exit 1; fi
+          docker compose -p lab -f "$main" -f "$OV" up -d --no-build
+          docker compose -p lab -f "$main" -f "$OV" ps
+
+      - name: Live probes
+        run: |
+          bash lab/probe.sh "$PRODUCT" "$RUNNER_TEMP/up" "$GITHUB_WORKSPACE/lab/override-$PRODUCT.yaml" "$RUNNER_TEMP/probes-$PRODUCT.md"
+          cat "$RUNNER_TEMP/probes-$PRODUCT.md"
+          {
+            echo "## $PRODUCT: live probes"
+            cat "$RUNNER_TEMP/probes-$PRODUCT.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: probes-${{ matrix.product }}
+          path: ${{ runner.temp }}/probes-${{ matrix.product }}.md
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Container logs on failure
+        if: failure()
+        working-directory: ${{ runner.temp }}/up
+        run: docker compose -p lab -f "$(ls docker-compose.y*ml | head -1)" -f "$GITHUB_WORKSPACE/lab/override-$PRODUCT.yaml" logs --tail 100 || true
+
+      - name: Tear down
+        if: always()
+        working-directory: ${{ runner.temp }}/up
+        run: docker compose -p lab -f "$(ls docker-compose.y*ml | head -1)" -f "$GITHUB_WORKSPACE/lab/override-$PRODUCT.yaml" down -v --remove-orphans || true
