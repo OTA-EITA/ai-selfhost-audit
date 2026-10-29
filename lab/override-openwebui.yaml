@@ -1,0 +1,6 @@
+# Lab only: pin the image and bind the port to 127.0.0.1 on the CI runner.
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.12.3
+    ports: !override
+      - "127.0.0.1:3000:8080"

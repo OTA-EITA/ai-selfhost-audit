@@ -1,0 +1,12 @@
+# Lab only: pin the image, bind the port to 127.0.0.1, and keep data in a
+# named volume (the upstream bind mount of ~/.flowise is not writable by the
+# container user on the runner).
+services:
+  flowise:
+    image: flowiseai/flowise:3.1.4
+    ports: !override
+      - "127.0.0.1:3000:3000"
+    volumes: !override
+      - flowise-data:/home/node/.flowise
+volumes:
+  flowise-data:

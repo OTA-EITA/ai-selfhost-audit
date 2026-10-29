@@ -1,0 +1,5 @@
+# Lab only: bind the published port to 127.0.0.1 on the CI runner.
+services:
+  n8n:
+    ports: !override
+      - "127.0.0.1:5678:5678"

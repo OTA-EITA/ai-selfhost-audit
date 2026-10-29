@@ -1,0 +1,14 @@
+# Lab only: use the published v1.106.2 image instead of building, and bind
+# every published port to 127.0.0.1 on the CI runner.
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm:v1.106.2
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:4000:4000"
+  db:
+    ports: !override
+      - "127.0.0.1:5432:5432"
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9090:9090"

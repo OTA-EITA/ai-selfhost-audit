@@ -1,0 +1,10 @@
+# Lab only: pin the image and bind every published port to 127.0.0.1.
+services:
+  langflow:
+    image: langflowai/langflow:1.12.7
+    pull_policy: missing
+    ports: !override
+      - "127.0.0.1:7860:7860"
+  postgres:
+    ports: !override
+      - "127.0.0.1:5432:5432"
