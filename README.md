@@ -2,6 +2,31 @@
 
 [![ci](https://github.com/OTA-EITA/ai-selfhost-audit/actions/workflows/ci.yml/badge.svg)](https://github.com/OTA-EITA/ai-selfhost-audit/actions/workflows/ci.yml)
 
+Is your self-hosted n8n, Open WebUI, LiteLLM, Langflow or Flowise safe to expose? `ai-selfhost-audit` reads the `docker-compose.yaml` and `.env` you deploy and tells you, before anyone else finds out:
+
+- whether **the first visitor can become the admin** (n8n, Open WebUI and Flowise all work this way until an admin exists)
+- whether **example secrets from the official compose files** are still in use (`changePassword`, `dbpassword9090`, ...)
+- whether a **risky switch** is on (Langflow auto-login, disabled SSRF protection, unauthenticated webhooks, ...)
+- whether the **image version has known vulnerabilities**, including ones in the CISA KEV catalog
+
+It only reads files. It never talks to Docker or the network, so it is safe to run in CI.
+
+```console
+$ go install github.com/OTA-EITA/ai-selfhost-audit/cmd/ai-selfhost-audit@latest
+$ cd my-open-webui && ai-selfhost-audit
+SEVERITY  ID      SERVICE     LOCATION                 FINDING
+MEDIUM    OWU001  open-webui  docker-compose.yaml:11  First visitor can sign up as the Open WebUI admin
+LOW       GEN006  open-webui  docker-compose.yaml:11  Image is not pinned to a version
+LOW       OWU008  open-webui  docker-compose.yaml:11  CORS allows any origin
+INFO      GEN002  open-webui  docker-compose.yaml:22  Application port published on all host interfaces
+
+4 findings: 0 high, 1 medium, 2 low, 1 info
+```
+
+Each finding comes with a fix and a link to the line of upstream source it is based on. Use `--format sarif` to send results to GitHub code scanning and `--fail-on medium` to fail a CI job. The rules were checked by actually starting each product's official compose stack on a disposable GitHub Actions runner ([lab results](#実環境での確認ai-lab)); the write-up is on Qiita (Japanese).
+
+---
+
 n8n・Open WebUI・LiteLLM・Langflow・Flowise を Docker Compose でセルフホストしたときの `docker-compose.yaml` と `.env` を読み、危ない既定値や設定、既知の脆弱性があるバージョンを調べる CLI です。ファイルを読むだけで、Docker やネットワークには触りません。
 
 A read-only CLI that checks the Docker Compose files of self-hosted AI platforms (n8n, Open WebUI, LiteLLM, Langflow, Flowise) for open first-run setup, example secrets, risky switches and image versions with known vulnerabilities. It never talks to Docker or the network.
