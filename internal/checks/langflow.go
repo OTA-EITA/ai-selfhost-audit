@@ -31,7 +31,7 @@ func init() {
 			Remediation: "Remove LANGFLOW_RESTRICT_LOCAL_FILE_ACCESS=false and LANGFLOW_SSRF_PROTECTION_ENABLED=false.",
 			Refs:        []string{lgfSrc + "src/lfx/src/lfx/services/settings/groups/security.py#L22-L31", lgfSrc + "src/lfx/src/lfx/services/settings/groups/security.py#L259-L276"}},
 		Rule{ID: "LGF008", Product: "langflow", Severity: High, Title: "Langflow version has vulnerabilities known to be exploited",
-			Remediation: "Upgrade: versions before 1.9.1 carry CVE-2025-3248, CVE-2025-34291, CVE-2026-33017 and CVE-2026-55255, all in the CISA KEV catalog.",
+			Remediation: "Upgrade: 1.10.0 and earlier carry CVE-2025-3248, CVE-2025-34291, CVE-2026-0770, CVE-2026-33017, CVE-2026-55255 and CVE-2026-9198, all in the CISA KEV catalog.",
 			Refs:        []string{"https://www.cisa.gov/known-exploited-vulnerabilities-catalog", "https://github.com/langflow-ai/langflow/security/advisories"}},
 		Rule{ID: "LGF009", Product: "langflow", Severity: Medium, Title: "Langflow version is below the latest security fixes",
 			Remediation: "Upgrade to 1.10.3 or later (weak credential encryption key before 1.10.1, MCP command injection and SSRF fixes in 1.10.3).",
@@ -80,8 +80,8 @@ func checkLangflow(c *ctx, d Detected) {
 	if v := d.Version; v != "" {
 		at := setting{service: s.Name, file: c.in.Project.File, line: s.Line}
 		switch {
-		case versionLess(v, "1.9.1"):
-			c.add("LGF008", d, at, fmt.Sprintf("Image tag %s is below 1.9.1.", v))
+		case versionLess(v, "1.10.1"):
+			c.add("LGF008", d, at, fmt.Sprintf("Image tag %s is 1.10.0 or earlier.", v))
 		case versionLess(v, "1.10.3"):
 			c.add("LGF009", d, at, fmt.Sprintf("Image tag %s is below 1.10.3.", v))
 		}

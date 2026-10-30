@@ -228,6 +228,11 @@ func TestLangflowOldImage(t *testing.T) {
 	if !has(r, "LGF009") {
 		t.Error("1.10.2 is below 1.10.3")
 	}
+	// CVE-2026-9198 (KEV) covers 1.0.0 through 1.10.0.
+	r = inline(t, "services:\n  lf:\n    image: langflowai/langflow:1.10.0\n")
+	if !has(r, "LGF008") {
+		t.Errorf("1.10.0 is in the KEV range: %v", ids(r))
+	}
 }
 
 func TestLangflowSwitches(t *testing.T) {
