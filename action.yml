@@ -1,0 +1,61 @@
+name: ai-selfhost-audit
+description: Check Docker Compose files of self-hosted n8n, Open WebUI, LiteLLM, Langflow and Flowise for open first-run setup, example secrets and vulnerable versions
+author: OTA-EITA
+branding:
+  icon: shield
+  color: orange
+
+inputs:
+  compose:
+    description: Compose file to read. Empty means compose.yaml / docker-compose.yaml in working-directory
+    default: ""
+  env:
+    description: Space separated env files used for variable expansion (later files win). Empty means .env next to the compose file
+    default: ""
+  working-directory:
+    description: Directory to run in
+    default: .
+  fail-on:
+    description: Fail on findings at least this severe (info, low, medium, high or none)
+    default: high
+  all-profiles:
+    description: Also check services whose compose profile is not active
+    default: "false"
+  sarif-file:
+    description: Where to write the SARIF report
+    default: ai-selfhost-audit.sarif
+
+outputs:
+  sarif-file:
+    description: Path of the SARIF report, for github/codeql-action/upload-sarif
+    value: ${{ steps.audit.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
+    - name: Build
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: go build -trimpath -o "$RUNNER_TEMP/ai-selfhost-audit" ./cmd/ai-selfhost-audit
+    - name: Audit
+      id: audit
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_COMPOSE: ${{ inputs.compose }}
+        INPUT_ENV: ${{ inputs.env }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_ALL_PROFILES: ${{ inputs.all-profiles }}
+        INPUT_SARIF: ${{ inputs.sarif-file }}
+      run: |
+        args=(--fail-on "$INPUT_FAIL_ON")
+        if [ -n "$INPUT_COMPOSE" ]; then args+=(--compose "$INPUT_COMPOSE"); fi
+        for f in $INPUT_ENV; do args+=(--env "$f"); done
+        if [ "$INPUT_ALL_PROFILES" = "true" ]; then args+=(--all-profiles); fi
+        echo "sarif-file=$INPUT_SARIF" >> "$GITHUB_OUTPUT"
+        "$RUNNER_TEMP/ai-selfhost-audit" "${args[@]}" --fail-on none --format sarif > "$INPUT_SARIF"
+        "$RUNNER_TEMP/ai-selfhost-audit" "${args[@]}"

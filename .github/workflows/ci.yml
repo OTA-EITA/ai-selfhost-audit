@@ -38,3 +38,38 @@ jobs:
 
       - name: Build
         run: go build -trimpath -o ai-selfhost-audit ./cmd/ai-selfhost-audit
+
+  action:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the action on the Open WebUI test data
+        id: audit
+        uses: ./
+        with:
+          working-directory: testdata/openwebui
+          fail-on: none
+
+      - name: Check the SARIF report
+        working-directory: testdata/openwebui
+        env:
+          SARIF: ${{ steps.audit.outputs.sarif-file }}
+        run: |
+          jq -e '[.runs[0].results[].ruleId] | index("OWU001")' "$SARIF"
+
+      - name: The action fails on findings at the threshold
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: testdata/openwebui
+          fail-on: medium
+
+      - name: Check that the strict run failed
+        env:
+          OUTCOME: ${{ steps.strict.outcome }}
+        run: test "$OUTCOME" = failure

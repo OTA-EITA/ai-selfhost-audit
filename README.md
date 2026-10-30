@@ -23,7 +23,28 @@ INFO      GEN002  open-webui  docker-compose.yaml:22  Application port published
 4 findings: 0 high, 1 medium, 2 low, 1 info
 ```
 
-Each finding comes with a fix and a link to the line of upstream source it is based on. Use `--format sarif` to send results to GitHub code scanning and `--fail-on medium` to fail a CI job. The rules were checked by actually starting each product's official compose stack on a disposable GitHub Actions runner ([lab results](#実環境での確認ai-lab)); the write-up is on Qiita (Japanese).
+Each finding comes with a fix and a link to the line of upstream source it is based on. Use `--format sarif` to send results to GitHub code scanning and `--fail-on medium` to fail a CI job. As a GitHub Action:
+
+```yaml
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@v5
+    with:
+      persist-credentials: false
+  - uses: OTA-EITA/ai-selfhost-audit@main # pin to a commit SHA
+    id: audit
+    with:
+      working-directory: deploy/n8n
+      fail-on: medium
+  - uses: github/codeql-action/upload-sarif@v4
+    if: always()
+    with:
+      sarif_file: deploy/n8n/${{ steps.audit.outputs.sarif-file }}
+```
+
+The rules were checked by actually starting each product's official compose stack on a disposable GitHub Actions runner ([lab results](#実環境での確認ai-lab)); the write-up is on Qiita (Japanese).
 
 ---
 
