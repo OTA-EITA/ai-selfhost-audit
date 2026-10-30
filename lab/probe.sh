@@ -31,6 +31,19 @@ code() {
   shift 2
   curl -s -o body.json -w '%{http_code}' --max-time 20 -X "$m" "$u" "$@" || true
 }
+# snip -> first 80 characters of the last response body, on one line
+snip() { tr -d '\n\r|`' < body.json 2>/dev/null | cut -c1-80; }
+logs_if_down() { # service: print recent logs to stderr when the service never came up
+  echo "--- $1 logs ---" >&2
+  dc logs --tail 60 "$1" >&2 2>&1 || true
+}
+wait_json() { # url jq-filter tries: wait until the URL returns JSON matching the filter
+  for _ in $(seq 1 "${3:-60}"); do
+    curl -s --max-time 5 "$1" 2>/dev/null | jq -e "$2" >/dev/null 2>&1 && return 0
+    sleep 5
+  done
+  return 1
+}
 wait_for() { # url expected-code tries
   for _ in $(seq 1 "${3:-60}"); do
     [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1" || true)" = "$2" ] && return 0
@@ -52,13 +65,19 @@ n8n)
   row "Upstream compose: n8n port host_ip" "(all interfaces)" "$(upstream_host_ip n8n)" info
   check "Bare '- POSTGRES_PASSWORD' resolved from .env" "changePassword" \
     "$(dc config --format json | jq -r '.services.postgres.environment.POSTGRES_PASSWORD // "unset"')"
-  wait_for "$B/healthz" 200 60 || echo "n8n did not become healthy" >&2
+  wait_json "$B/rest/settings" '.data' 90 || logs_if_down n8n
   code GET "$B/rest/settings" >/dev/null
   check "GET /rest/settings: showSetupOnFirstLoad (no login)" "true" "$(jq -r '.data.userManagement.showSetupOnFirstLoad' body.json 2>/dev/null)"
   owner='{"email":"lab-owner@example.com","firstName":"Lab","lastName":"Owner","password":"Lab-Owner-Passw0rd"}'
-  check "POST /rest/owner/setup without login (first visitor)" "200" "$(code POST "$B/rest/owner/setup" -H 'content-type: application/json' -d "$owner")"
-  check "POST /rest/owner/setup again" "400" "$(code POST "$B/rest/owner/setup" -H 'content-type: application/json' -d "$owner")"
-  check "GET /rest/workflows without login" "401" "$(code GET "$B/rest/workflows")"
+  c=$(code POST "$B/rest/owner/setup" -H 'content-type: application/json' -d "$owner")
+  check "POST /rest/owner/setup without login (first visitor)" "200" "$c"
+  row "  response" "owner user" "$(jq -r '.data.role // .data.email // empty' body.json 2>/dev/null) $(snip | cut -c1-40)" info
+  c=$(code POST "$B/rest/owner/setup" -H 'content-type: application/json' -d "$owner")
+  check "POST /rest/owner/setup again" "400" "$c"
+  row "  response" "already set up" "$(snip)" info
+  c=$(code GET "$B/rest/workflows")
+  check "GET /rest/workflows without login" "401" "$c"
+  row "  response" "Unauthorized" "$(snip)" info
   check "Postgres login with the example password changePassword" "ok" "$(psql_as postgres changeUser changePassword n8n)"
   ;;
 openwebui)
@@ -75,7 +94,7 @@ openwebui)
 flowise)
   B=http://127.0.0.1:3000
   row "Upstream compose: flowise port host_ip" "(all interfaces)" "$(upstream_host_ip flowise)" info
-  wait_for "$B/api/v1/ping" 200 60 || echo "flowise did not become healthy" >&2
+  wait_for "$B/api/v1/ping" 200 90 || logs_if_down flowise
   code POST "$B/api/v1/auth/resolve" >/dev/null
   check "POST /api/v1/auth/resolve (no login)" "/organization-setup" "$(jq -r '.redirectUrl' body.json 2>/dev/null)"
   reg() { code POST "$B/api/v1/account/register" -H 'content-type: application/json' -d "{\"user\":{\"name\":\"$1\",\"email\":\"$1@example.com\",\"credential\":\"Lab-$1-Passw0rd!\"}}"; }
@@ -105,7 +124,7 @@ litellm)
   row "Upstream compose: db port host_ip" "(all interfaces)" "$(upstream_host_ip db)" info
   sleep 20
   row "litellm with the .env.example as is (empty master key)" "refuses to start" \
-    "$(dc logs litellm 2>&1 | grep -o -m1 'refused to start[^.]*' || dc ps litellm --format '{{.State}}')" info
+    "$(dc logs litellm 2>&1 | grep 'refused to start:' | grep -v '{' | grep -o -m1 'refused to start: [^.]*' || dc ps -a litellm --format '{{.State}}')" info
   check "Postgres login with the example password dbpassword9090" "ok" "$(psql_as db llmproxy dbpassword9090 litellm)"
   key="sk-$(openssl rand -hex 24)"
   sed -i 's/^LITELLM_MASTER_KEY *=.*/LITELLM_MASTER_KEY='"$key"'/' .env

@@ -61,6 +61,9 @@ jobs:
             [ "$out" = ".env.example" ] && out=.env
             curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/$f" -o "$RUNNER_TEMP/up/$out"
           done
+          if [ "$PRODUCT" = flowise ]; then
+            mkdir -p "$RUNNER_TEMP/up/flowise-data" && sudo chown 1000:1000 "$RUNNER_TEMP/up/flowise-data"
+          fi
           if [ "$PRODUCT" = langflow ]; then
             # The compose file refuses to start without it.
             echo "LANGFLOW_SUPERUSER_PASSWORD=$(openssl rand -hex 16)" > "$RUNNER_TEMP/up/.env"
