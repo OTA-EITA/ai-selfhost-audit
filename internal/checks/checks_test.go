@@ -258,7 +258,7 @@ services:
     image: flowiseai/flowise:3.0.13
     ports: ["127.0.0.1:3000:3000"]
     environment:
-      - FLOWISE_USERNAME=admin
+      - FLOWISE_PASSWORD=admin
       - TOOL_FUNCTION_BUILTIN_DEP=crypto,fs
       - TOOL_FUNCTION_EXTERNAL_DEP=axios,puppeteer
       - HTTP_SECURITY_CHECK=false
@@ -266,7 +266,7 @@ services:
       - CORS_ORIGINS=*
       - TRUST_PROXY=
 `)
-	for _, id := range []string{"FLW002", "FLW003", "FLW004", "FLW005", "FLW006", "FLW007"} {
+	for _, id := range []string{"FLW002", "FLW004", "FLW005", "FLW006", "FLW007"} {
 		if !has(r, id) {
 			t.Errorf("missing %s in %v", id, ids(r))
 		}
@@ -275,6 +275,13 @@ services:
 		if has(r, id) {
 			t.Errorf("unexpected %s (bound to 127.0.0.1)", id)
 		}
+	}
+	if has(r, "FLW003") {
+		t.Error("3.0.x still uses FLOWISE_USERNAME/PASSWORD for the migration")
+	}
+	r = inline(t, "services:\n  f:\n    image: flowiseai/flowise:3.1.4\n    environment: [FLOWISE_PASSWORD=x]\n")
+	if !has(r, "FLW003") {
+		t.Error("3.1.4 no longer reads FLOWISE_PASSWORD")
 	}
 	for _, f := range r.Findings {
 		if f.RuleID == "FLW004" && strings.Contains(f.Message, "crypto") {

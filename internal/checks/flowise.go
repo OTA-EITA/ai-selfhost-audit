@@ -17,7 +17,7 @@ func init() {
 			Remediation: "Upgrade to 3.1.3 or later: before 3.1.0 the JWT, session and token-hash secrets had public defaults and SSRF checks were off; 3.1.3 fixes several unauthenticated token and RCE issues.",
 			Refs:        []string{"https://github.com/FlowiseAI/Flowise/security/advisories/GHSA-cc4f-hjpj-g9p8", "https://github.com/FlowiseAI/Flowise/security/advisories/GHSA-qgvm-j2hm-6m38"}},
 		Rule{ID: "FLW003", Product: "flowise", Severity: Medium, Title: "FLOWISE_USERNAME / FLOWISE_PASSWORD have no effect",
-			Remediation: "Basic auth was removed in 3.0.1; the variables do nothing. Use the built-in accounts and remove them.",
+			Remediation: "Username and password auth is deprecated since 3.0.1 (it was only used to migrate to the built-in accounts), and 3.1.4 no longer reads the variables. Use the built-in accounts and remove them.",
 			Refs:        []string{"https://github.com/FlowiseAI/FlowiseDocs/blob/32d7f0cc7929bbd9e592cbc8e7a69bb82625f418/en/configuration/authorization/app-level.md#L11-L13"}},
 		Rule{ID: "FLW004", Product: "flowise", Severity: High, Title: "Custom code may load dangerous modules",
 			Remediation: "Remove fs, child_process, os, net, http, * and similar from TOOL_FUNCTION_BUILTIN_DEP, and puppeteer, playwright, typeorm, pg, mysql2 from TOOL_FUNCTION_EXTERNAL_DEP.",
@@ -48,7 +48,7 @@ func checkFlowise(c *ctx, d Detected) {
 	if v := d.Version; v != "" && versionLess(v, "3.1.3") {
 		c.add("FLW002", d, at, fmt.Sprintf("Image tag %s is below 3.1.3.", v))
 	}
-	if d.Version == "" || !versionLess(d.Version, "3.0.1") {
+	if d.Version == "" || !versionLess(d.Version, "3.1.4") {
 		for _, k := range []string{"FLOWISE_USERNAME", "FLOWISE_PASSWORD"} {
 			if st := c.val(s, k, ""); st.set {
 				c.add("FLW003", d, st, k+" is set but ignored.")
