@@ -66,7 +66,7 @@ jobs:
             # The compose file passes every variable as KEY=${KEY}, so the
             # commented-out paths in .env.example arrive as "" and 3.1.4 crashes
             # in mkdir('') (FlowiseAI/Flowise#6030). Set them as the issue suggests.
-            printf '%s\n' DATABASE_PATH=/home/node/.flowise SECRETKEY_PATH=/home/node/.flowise \
+            printf '%s\n' DATABASE_TYPE=sqlite DATABASE_PATH=/home/node/.flowise SECRETKEY_PATH=/home/node/.flowise \
               LOG_PATH=/home/node/.flowise/logs BLOB_STORAGE_PATH=/home/node/.flowise/storage >> "$RUNNER_TEMP/up/.env"
           fi
           if [ "$PRODUCT" = langflow ]; then
