@@ -185,6 +185,33 @@ INFO      GEN002  flowise  docker-compose.yml:155  Application port published on
 
 どの製品も、「最初にアクセスした人が管理者になれる」状態（N8N001、OWU001、FLW001）か、データベースの例のパスワード（GEN007）が出ます。公式の例は手元で試すためのもので、そのまま外に出す前提ではありません。
 
+## 実環境での確認（ai-lab）
+
+`.github/workflows/ai-lab.yml` は、GitHub Actions のランナー上で各製品を公式の compose ファイルから起動し、静的な点検の結果を実際のコンテナで確かめる手動実行専用のワークフローです（`workflow_dispatch` のみ）。公開ポートはすべて 127.0.0.1 に付け替えてから起動し、終わったら `docker compose down -v` で片付けます。手元のマシンやサーバーでは実行しないでください。
+
+2026-10-30 の結果:
+
+| 製品 | 確かめたこと | 結果 |
+|---|---|---|
+| n8n 2.44.5 | ログインなしで `GET /rest/settings` | `showSetupOnFirstLoad: true`（未設定だと外から分かる） |
+| | ログインなしで `POST /rest/owner/setup` | 200。最初に送った人が owner になった |
+| | 2 回目の `POST /rest/owner/setup` | 400 `Instance owner already setup` |
+| | `- POSTGRES_PASSWORD`（値なし）が `.env` から入るか | 入る（`changePassword`） |
+| | 例のパスワード `changePassword` で Postgres にログイン | できた |
+| Open WebUI 0.12.3 | ログインなしで `GET /api/config` | `onboarding: true` |
+| | 最初のサインアップ | `role: admin` |
+| | 2 人目のサインアップ | 403 |
+| LiteLLM 1.106.2 | `.env.example` のまま（マスターキーが空） | 起動を拒否（`refused to start: the master key is empty`） |
+| | マスターキーを設定して `/health`・`/metrics` をキーなしで | どちらも 401 |
+| | 例のパスワード `dbpassword9090` で Postgres にログイン | できた |
+| Langflow 1.12.7 | 既定のイメージで `GET /api/v1/auto_login` | 403（自動ログインは無効） |
+| | `LANGFLOW_AUTO_LOGIN=true` にして同じリクエスト | 200。スーパーユーザーのトークンが返った |
+| | 例のパスワード `langflow` で Postgres にログイン | できた |
+| Flowise 3.1.4 | 公式の compose と `.env.example` のまま起動 | 起動しない（空の `LOG_PATH` で `mkdir('')` が失敗、[#6030](https://github.com/FlowiseAI/Flowise/issues/6030)） |
+| | パスを `.env` に入れて起動 | 3.1.4 のイメージ自体が起動に失敗（[#6688](https://github.com/FlowiseAI/Flowise/issues/6688)）。今回は確かめられていない |
+
+どの製品も、公式の compose ファイルはアプリのポートをホストの全インターフェースに公開しています（`docker compose config` で確認）。
+
 ## 開発
 
 ```sh
